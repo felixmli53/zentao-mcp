@@ -35,6 +35,7 @@ func (s *Service) Execute(ctx context.Context, td *models.ToolDefinition, in map
 
 	templ := s.rePath.ReplaceAllStringFunc(td.Path, func(m string) string {
 		name := strings.Trim(m, "{}")
+		name = strings.TrimPrefix(name, ":")
 
 		if v, ok := in[name]; ok && v != nil {
 			return url.PathEscape(fmt.Sprint(v))

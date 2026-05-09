@@ -29,6 +29,6 @@ func New(proxy repository.Proxy, baseURL string) *Service {
 		metrics: measure.Get(),
 		proxy:   proxy,
 		baseURL: baseURL,
-		rePath:  regexp.MustCompile(`\{([^/}]+)\}`),
+		rePath:  regexp.MustCompile(`\{([^/}]+)\}|:([A-Za-z_][A-Za-z0-9_]*)`),
 	}
 }

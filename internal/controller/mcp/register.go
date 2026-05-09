@@ -54,7 +54,7 @@ func (c *Controller) registerTool(ctx context.Context, server *mcpsdk.Server, td
 	}
 
 	if td.OutputSchema != nil {
-		t.OutputSchema = td.OutputSchema
+		t.OutputSchema = compatibleOutputSchema(td.OutputSchema)
 	}
 
 	mcpsdk.AddTool(server, t, c.toolHandler(td))

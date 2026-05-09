@@ -161,6 +161,6 @@ func main() {
 func newStreamableMCPHandler(server *mcp.Server) http.Handler {
 	return mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{JSONResponse: true},
+		&mcp.StreamableHTTPOptions{JSONResponse: true, Stateless: true},
 	)
 }
