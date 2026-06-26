@@ -3,11 +3,17 @@ package schema
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"regexp"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/merzzzl/openapi-mcp-server/internal/models"
 )
 
-func (s *Service) buildToolInputSchema(ctx context.Context, doc *openapi3.T, op *openapi3.Operation, pathItem *openapi3.PathItem) json.RawMessage {
+// rePathParam matches path template parameters in both :name and {name} forms.
+var rePathParam = regexp.MustCompile(`(?:\:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})`)
+
+func (s *Service) buildToolInputSchema(ctx context.Context, doc *openapi3.T, op *openapi3.Operation, pathItem *openapi3.PathItem, pathTmpl string) json.RawMessage {
 	ctx, span := s.tracer.Start(ctx, "BuildToolInputSchema")
 	defer span.End()
 
@@ -22,6 +28,8 @@ func (s *Service) buildToolInputSchema(ctx context.Context, doc *openapi3.T, op 
 	}
 
 	parameters = append(parameters, op.Parameters...)
+
+	definedPathParams := collectDefinedPathParams(parameters)
 
 	for _, p := range parameters {
 		if p == nil || p.Value == nil {
@@ -54,6 +62,30 @@ func (s *Service) buildToolInputSchema(ctx context.Context, doc *openapi3.T, op 
 		}
 	}
 
+	// Auto-infer missing path parameters from the URL template.
+	// The Zentao OpenAPI spec omits path parameter definitions for most detail
+	// endpoints (e.g. /tasks/:taskID), which causes the MCP server to drop the
+	// parameter during tool registration and produce broken URLs at runtime.
+	pathParamNames := extractPathParamNames(pathTmpl)
+	for _, name := range pathParamNames {
+		if definedPathParams[name] {
+			continue
+		}
+
+		prop := &openapi3.Schema{
+			Type:        &openapi3.Types{"string"},
+			Description: fmt.Sprintf("Path parameter: %s", name),
+		}
+		schema.WithProperty(name, prop)
+		schema.Required = append(schema.Required, name)
+
+		s.logger.WarnContext(ctx, "auto-inferred missing path parameter",
+			"parameter", name,
+			"path", pathTmpl,
+			"op", op.OperationID,
+		)
+	}
+
 	if op.RequestBody != nil && op.RequestBody.Value != nil {
 		rb := op.RequestBody.Value
 
@@ -83,4 +115,55 @@ func (s *Service) buildToolInputSchema(ctx context.Context, doc *openapi3.T, op 
 	)
 
 	return json.RawMessage(b)
+}
+
+// extractPathParamNames returns all parameter names found in a path template.
+// Supports both :name and {name} syntax:
+//
+//	/tasks/:taskID       → ["taskID"]
+//	/tasks/{taskID}      → ["taskID"]
+//	/executions/{executionID}/tasks → ["executionID"]
+func extractPathParamNames(pathTmpl string) []string {
+	matches := rePathParam.FindAllStringSubmatch(pathTmpl, -1)
+	var names []string
+	for _, m := range matches {
+		// m[1] is the :name capture, m[2] is the {name} capture.
+		name := m[1]
+		if name == "" {
+			name = m[2]
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// collectDefinedPathParams returns the set of path parameter names already
+// declared in the OpenAPI parameters list.
+func collectDefinedPathParams(parameters []*openapi3.ParameterRef) map[string]bool {
+	defined := map[string]bool{}
+	for _, p := range parameters {
+		if p != nil && p.Value != nil && p.Value.In == "path" {
+			defined[p.Value.Name] = true
+		}
+	}
+	return defined
+}
+
+// inferMissingPathParams scans the URL template for path parameters not
+// declared in the spec and returns ToolParam entries for each missing one.
+func inferMissingPathParams(parameters []*openapi3.ParameterRef, pathTmpl string) []models.ToolParam {
+	defined := collectDefinedPathParams(parameters)
+	var inferred []models.ToolParam
+	for _, name := range extractPathParamNames(pathTmpl) {
+		if defined[name] {
+			continue
+		}
+		inferred = append(inferred, models.ToolParam{
+			Name: name,
+			In:   "path",
+		})
+	}
+	return inferred
 }

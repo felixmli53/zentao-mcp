@@ -96,9 +96,9 @@ func (s *Service) buildTool(ctx context.Context, doc *openapi3.T, p, method stri
 		op.Summary, op.Description, fmt.Sprintf("%s %s", method, p), opID,
 	))
 
-	input := s.buildToolInputSchema(ctx, doc, op, pi)
+	input := s.buildToolInputSchema(ctx, doc, op, pi, p)
 	output, wrapOutput := s.buildToolOutputSchema(ctx, doc, op)
-	params := collectParams(op, pi)
+	params := collectParams(op, pi, p)
 
 	hasBody := op.RequestBody != nil && op.RequestBody.Value != nil
 
@@ -115,7 +115,7 @@ func (s *Service) buildTool(ctx context.Context, doc *openapi3.T, p, method stri
 	}
 }
 
-func collectParams(op *openapi3.Operation, pi *openapi3.PathItem) []models.ToolParam {
+func collectParams(op *openapi3.Operation, pi *openapi3.PathItem, pathTmpl string) []models.ToolParam {
 	var refs openapi3.Parameters
 
 	if pi != nil {
@@ -136,6 +136,9 @@ func collectParams(op *openapi3.Operation, pi *openapi3.PathItem) []models.ToolP
 			In:   ref.Value.In,
 		})
 	}
+
+	// Auto-infer missing path parameters from the URL template.
+	params = append(params, inferMissingPathParams(refs, pathTmpl)...)
 
 	return params
 }
