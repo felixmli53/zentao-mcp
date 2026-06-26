@@ -22,7 +22,7 @@ func TestBuildToolInputSchemaAcceptsNumericStringParameters(t *testing.T) {
 		},
 	}
 
-	inputSchema := New(nil).buildToolInputSchema(context.Background(), &openapi3.T{}, op, nil)
+	inputSchema := New(nil).buildToolInputSchema(context.Background(), &openapi3.T{}, op, nil, "")
 	resolved := resolveInputJSONSchema(t, inputSchema)
 
 	if err := resolved.Validate(map[string]any{"pageID": 1}); err != nil {

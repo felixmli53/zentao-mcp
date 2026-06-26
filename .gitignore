@@ -19,3 +19,6 @@ config.yaml
 
 # Test
 coverage.out
+
+# Output
+zentao-mcp
